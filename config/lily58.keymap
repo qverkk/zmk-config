@@ -10,16 +10,13 @@
 #include <dt-bindings/zmk/keys.h>
 
 / {
+#if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORT_BEHAVIOR)
     /*
      * Battery Report behavior instance.
      * When triggered it types the battery level of both halves, e.g.:  L:87% R:92%
      *
-     * Combo to trigger: hold Lower (mo 1) + tap B at the same time.
-     * Key positions on Lily58 (0-indexed, left-to-right, top-to-bottom):
-     *   Lower thumb key (left side) = position 52
-     *   B key (left side, row 3, col 5)  = position 39
-     *
-     * Adjust the key-positions values below if your layout differs.
+     * Combo to trigger: Lower thumb key (pos 52) + B (pos 39) simultaneously.
+     * Adjust key-positions if your layout differs.
      */
     bat_rpt: bat_rpt {
         compatible = "zmk,behavior-battery-report";
@@ -31,11 +28,11 @@
 
         combo_battery_report {
             timeout-ms = <200>;
-            /* Lower thumb key + B  →  type battery levels */
             key-positions = <39 52>;
             bindings = <&bat_rpt>;
         };
     };
+#endif
 
     keymap {
         compatible = "zmk,keymap";
