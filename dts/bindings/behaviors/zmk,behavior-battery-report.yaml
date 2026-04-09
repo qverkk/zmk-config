@@ -1,0 +1,13 @@
+description: |
+  ZMK Battery Report behavior - types the battery percentage of both
+  the central (left) and peripheral (right) keyboard halves as text.
+
+  Example output when triggered:  L:87% R:92%
+
+  Requires CONFIG_ZMK_BATTERY_REPORT_BEHAVIOR=y in your .conf file,
+  and CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y for the
+  right-half percentage.
+
+compatible: "zmk,behavior-battery-report"
+
+include: zero-param-behavior.yaml

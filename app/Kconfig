@@ -1,0 +1,9 @@
+# Kconfig for the battery-report behavior module
+
+config ZMK_BATTERY_REPORT_BEHAVIOR
+    bool "Battery Report Behavior"
+    depends on ZMK_BATTERY_REPORTING
+    help
+      Enables a behavior that, when triggered, types the battery
+      percentage of both keyboard halves as a text string
+      (e.g. "L:87% R:92%").
