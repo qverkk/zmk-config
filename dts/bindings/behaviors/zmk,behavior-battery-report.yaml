@@ -10,4 +10,4 @@ description: |
 
 compatible: "zmk,behavior-battery-report"
 
-include: zero-param-behavior.yaml
+include: zero_param.yaml
