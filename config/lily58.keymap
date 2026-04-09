@@ -20,7 +20,7 @@
      */
     behaviors {
         bat_rpt: bat_rpt {
-            compatible = "zmk,behavior-battery-report";
+            compatible = "zmk,bat-report";
             #binding-cells = <0>;
         };
     };

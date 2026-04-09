@@ -14,7 +14,7 @@
  * Bind in keymap with:  &bat_rpt
  */
 
-#define DT_DRV_COMPAT zmk_behavior_battery_report
+#define DT_DRV_COMPAT zmk_bat_report
 
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>

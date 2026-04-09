@@ -8,6 +8,6 @@ description: |
   and CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y for the
   right-half percentage.
 
-compatible: "zmk,behavior-battery-report"
+compatible: "zmk,bat-report"
 
 include: zero_param.yaml
