@@ -18,9 +18,11 @@
      * Combo to trigger: Lower thumb key (pos 52) + B (pos 39) simultaneously.
      * Adjust key-positions if your layout differs.
      */
-    bat_rpt: bat_rpt {
-        compatible = "zmk,behavior-battery-report";
-        #binding-cells = <0>;
+    behaviors {
+        bat_rpt: bat_rpt {
+            compatible = "zmk,behavior-battery-report";
+            #binding-cells = <0>;
+        };
     };
 
     combos {
