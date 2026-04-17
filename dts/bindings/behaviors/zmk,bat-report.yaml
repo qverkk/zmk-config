@@ -1,0 +1,9 @@
+description: |
+  ZMK Battery Report behavior - types the battery percentage of both
+  the central (left) and peripheral (right) keyboard halves as text.
+
+  Example output when triggered:  L:87% R:92%
+
+compatible: "zmk,bat-report"
+
+include: zero_param.yaml

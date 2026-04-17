@@ -10,12 +10,26 @@
 #include <dt-bindings/zmk/keys.h>
 
 / {
+    behaviors {
+        bat_rpt: bat_rpt {
+            compatible = "zmk,bat-report";
+            #binding-cells = <0>;
+        };
+    };
+
     macros {
         test_maco_claude: new_macro {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
             bindings = <&none>;
             label = "NEW_MACRO";
+        };
+
+        bat_rpt_macro: bat_rpt_macro {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            bindings = <&bat_rpt>;
+            label = "BAT_RPT";
         };
     };
 
