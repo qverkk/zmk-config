@@ -7,10 +7,6 @@
  * Types the battery level of both keyboard halves as text, e.g.:
  *   L:87% R:92%
  *
- * Required .conf options:
- *   CONFIG_ZMK_BATTERY_REPORT_BEHAVIOR=y
- *   CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y
- *
  * Bind in keymap with:  &bat_rpt
  */
 
@@ -33,79 +29,123 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-/* --------------------------------------------------------------------------
- * Key-tap helpers
- * We raise keycode-state-changed events directly into the ZMK event bus.
- * The normal HID pipeline then handles them (BLE / USB).
- * -------------------------------------------------------------------------- */
+/* Time between press and release, and between successive taps.
+ * Must be long enough that the HID layer can flush a BLE report
+ * between transitions (BLE connection interval is typically 7.5-15ms). */
+#define BAT_RPT_TAP_MS 15
 
-static void tap_encoded(uint32_t encoded) {
-    raise_zmk_keycode_state_changed_from_encoded(encoded, true,  k_uptime_get());
-    k_msleep(10);
-    raise_zmk_keycode_state_changed_from_encoded(encoded, false, k_uptime_get());
-    k_msleep(10);
-}
+/* Max chars we ever enqueue: "L:" + 3 digits + "%" + " R:" + 3 digits + "%" = 13 */
+#define BAT_RPT_MAX_KEYS 16
 
-/* Type an ASCII digit 0-9 */
-static void tap_digit(uint8_t d) {
-    /* Key codes N0..N9 are consecutive starting at ZMK's N0 */
-    tap_encoded(d == 0 ? N0 : (N1 + d - 1));
-}
+struct bat_rpt_state {
+    uint32_t keys[BAT_RPT_MAX_KEYS];
+    uint8_t  len;
+    uint8_t  idx;
+    bool     pressed;   /* current phase for keys[idx] */
+    bool     busy;
+    struct k_work_delayable work;
+};
 
-/* Type a decimal number 0-100 */
-static void type_uint8(uint8_t n) {
-    if (n >= 100) {
-        tap_digit(n / 100);
-        n %= 100;
-        tap_digit(n / 10);
-        tap_digit(n % 10);
-    } else if (n >= 10) {
-        tap_digit(n / 10);
-        tap_digit(n % 10);
-    } else {
-        tap_digit(n);
+static struct bat_rpt_state state;
+
+static void bat_rpt_enqueue(uint32_t encoded) {
+    if (state.len < BAT_RPT_MAX_KEYS) {
+        state.keys[state.len++] = encoded;
     }
 }
 
-/* --------------------------------------------------------------------------
- * Behavior callbacks
- * -------------------------------------------------------------------------- */
+static void bat_rpt_enqueue_uint8(uint8_t n) {
+    uint8_t digits[3];
+    uint8_t ndigits = 0;
+    if (n == 0) {
+        digits[ndigits++] = 0;
+    } else {
+        uint8_t v = n;
+        while (v > 0 && ndigits < 3) {
+            digits[ndigits++] = v % 10;
+            v /= 10;
+        }
+    }
+    /* emit most-significant first */
+    while (ndigits--) {
+        uint8_t d = digits[ndigits];
+        bat_rpt_enqueue(d == 0 ? N0 : (N1 + d - 1));
+    }
+}
+
+static void bat_rpt_work_handler(struct k_work *work) {
+    ARG_UNUSED(work);
+
+    if (state.idx >= state.len) {
+        state.busy = false;
+        state.len = 0;
+        state.idx = 0;
+        return;
+    }
+
+    uint32_t encoded = state.keys[state.idx];
+    raise_zmk_keycode_state_changed_from_encoded(encoded, state.pressed, k_uptime_get());
+
+    if (state.pressed) {
+        /* just pressed; next tick releases the same key */
+        state.pressed = false;
+    } else {
+        /* just released; advance to next key, next tick presses it */
+        state.idx++;
+        state.pressed = true;
+    }
+
+    k_work_schedule(&state.work, K_MSEC(BAT_RPT_TAP_MS));
+}
 
 static int on_battery_report_binding_pressed(struct zmk_behavior_binding *binding,
                                              struct zmk_behavior_binding_event event) {
+    ARG_UNUSED(binding);
+    ARG_UNUSED(event);
+
+    if (state.busy) {
+        return ZMK_BEHAVIOR_OPAQUE;
+    }
+
+    state.len = 0;
+    state.idx = 0;
+    state.pressed = true;
+
     uint8_t central_pct = zmk_battery_state_of_charge();
 
-    /* Type "L:" */
-    tap_encoded(LS(L));            /* L  (shift+l) */
-    tap_encoded(LS(SEMICOLON));    /* :  (shift+;) */
+    bat_rpt_enqueue(LS(L));
+    bat_rpt_enqueue(LS(SEMICOLON));
+    bat_rpt_enqueue_uint8(central_pct);
+    bat_rpt_enqueue(LS(N5));
 
-    type_uint8(central_pct);
-
-    tap_encoded(LS(N5));           /* %  (shift+5) */
-
-    /* Type " R:" */
-    tap_encoded(SPACE);
-    tap_encoded(LS(R));            /* R */
-    tap_encoded(LS(SEMICOLON));    /* : */
+    bat_rpt_enqueue(SPACE);
+    bat_rpt_enqueue(LS(R));
+    bat_rpt_enqueue(LS(SEMICOLON));
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
     uint8_t right_pct = 0;
     int rc = zmk_split_central_get_peripheral_battery_level(0, &right_pct);
     if (rc == 0) {
-        type_uint8(right_pct);
-        tap_encoded(LS(N5));       /* % */
+        bat_rpt_enqueue_uint8(right_pct);
+        bat_rpt_enqueue(LS(N5));
     } else {
-        tap_encoded(LS(SLASH));    /* ? */
+        LOG_WRN("bat_rpt: peripheral battery fetch failed: %d", rc);
+        bat_rpt_enqueue(LS(SLASH));
     }
 #else
-    tap_encoded(LS(SLASH));        /* ? – peripheral fetching not enabled */
+    bat_rpt_enqueue(LS(SLASH));
 #endif
+
+    state.busy = true;
+    k_work_schedule(&state.work, K_NO_WAIT);
 
     return ZMK_BEHAVIOR_OPAQUE;
 }
 
 static int on_battery_report_binding_released(struct zmk_behavior_binding *binding,
                                               struct zmk_behavior_binding_event event) {
+    ARG_UNUSED(binding);
+    ARG_UNUSED(event);
     return ZMK_BEHAVIOR_OPAQUE;
 }
 
@@ -116,6 +156,7 @@ static const struct behavior_driver_api behavior_battery_report_driver_api = {
 
 static int behavior_battery_report_init(const struct device *dev) {
     ARG_UNUSED(dev);
+    k_work_init_delayable(&state.work, bat_rpt_work_handler);
     return 0;
 }
 
